@@ -12,6 +12,7 @@ from analytics import waste_hotspots
 st.set_page_config(page_title="Smart Waste Exchange", layout="wide")
 
 FILE = "waste_data.csv"
+ADMIN_PASSWORD = "admin123"
 
 COLUMNS = [
     "id", "type", "quantity", "location",
@@ -20,56 +21,85 @@ COLUMNS = [
 ]
 
 # ---------------------------
-# SAFE DATA LOADING (FIXED)
+# CLEAN UI STYLE
+# ---------------------------
+st.markdown("""
+<style>
+.block-container {
+    padding-top: 2rem;
+    padding-bottom: 2rem;
+}
+.stButton>button {
+    background-color: #16a34a;
+    color: white;
+    border-radius: 10px;
+    height: 3em;
+    width: 100%;
+}
+.stTextInput, .stNumberInput, .stSelectbox {
+    border-radius: 8px;
+}
+</style>
+""", unsafe_allow_html=True)
+
+# ---------------------------
+# SAFE DATA LOAD
 # ---------------------------
 if "waste_data" not in st.session_state:
-
     if os.path.exists(FILE) and os.path.getsize(FILE) > 0:
         try:
             st.session_state.waste_data = pd.read_csv(FILE)
-        except pd.errors.EmptyDataError:
+        except:
             st.session_state.waste_data = pd.DataFrame(columns=COLUMNS)
     else:
         st.session_state.waste_data = pd.DataFrame(columns=COLUMNS)
 
-# ---------------------------
-# SAVE FUNCTION
-# ---------------------------
 def save():
-    try:
-        st.session_state.waste_data.to_csv(FILE, index=False)
-    except Exception as e:
-        st.error(f"Error saving data: {e}")
+    st.session_state.waste_data.to_csv(FILE, index=False)
 
 # ---------------------------
-# UI HEADER
+# HEADER
 # ---------------------------
-st.title("♻️ Smart Waste Exchange System")
-st.caption("AI-Driven Civic Waste Management Platform for Eswatini")
+st.title("Smart Waste Exchange")
+st.subheader("AI-powered waste reporting and recycling platform")
 
+st.markdown("""
+Welcome to a smarter way to manage waste.
+
+- Report waste easily  
+- Get connected to recyclers  
+- Improve environmental sustainability  
+""")
+
+# ---------------------------
+# NAVIGATION
+# ---------------------------
 menu = st.sidebar.radio("Navigation", [
-    "🌍 Public Report",
-    "🚛 Recycler Dashboard",
-    "🛠 Admin Dashboard"
+    "Report Waste",
+    "Recycler",
+    "Admin"
 ])
 
 # ---------------------------
-# 🌍 PUBLIC REPORT (NO LOGIN)
+# PUBLIC REPORT
 # ---------------------------
-if menu == "🌍 Public Report":
+if menu == "Report Waste":
 
-    st.subheader("Report Waste (Public Access)")
+    st.header("Report Waste")
 
-    type_ = st.selectbox("Waste Type", ["Plastic", "Glass", "Metal", "Organic"])
-    qty = st.number_input("Quantity (kg)", min_value=1)
-    location = st.selectbox("Location", ["Manzini", "Mbabane", "Nhlangano"])
+    col1, col2 = st.columns(2)
 
-    lat = st.number_input("Latitude (optional)", value=0.0)
-    lon = st.number_input("Longitude (optional)", value=0.0)
+    with col1:
+        type_ = st.selectbox("Waste Type", ["Plastic", "Glass", "Metal", "Organic"])
+        qty = st.number_input("Quantity (kg)", min_value=1)
+        location = st.selectbox("Location", ["Manzini", "Mbabane", "Nhlangano"])
 
-    desc = st.text_area("Description (optional)")
+    with col2:
+        lat = st.number_input("Latitude (optional)", value=0.0)
+        lon = st.number_input("Longitude (optional)", value=0.0)
+        desc = st.text_area("Description")
 
-    if st.button("Submit Report"):
+    if st.button("Report Waste"):
 
         new_id = len(st.session_state.waste_data) + 1
         recycler = assign_recycler(location)
@@ -94,66 +124,74 @@ if menu == "🌍 Public Report":
 
         save()
 
-        st.success("Waste submitted successfully!")
-        st.info(f"Assigned Recycler: {recycler}")
+        st.success("Waste reported successfully")
+        st.info(f"Recycler assigned: {recycler}")
         st.info(f"Tracking ID: {new_id}")
 
 # ---------------------------
-# 🚛 RECYCLER DASHBOARD
+# RECYCLER DASHBOARD
 # ---------------------------
-elif menu == "🚛 Recycler Dashboard":
+elif menu == "Recycler":
 
-    st.subheader("Recycler Operations Panel")
+    st.header("Recycler Dashboard")
 
     df = st.session_state.waste_data
 
     if df.empty:
-        st.info("No waste reports yet.")
+        st.info("No waste reports available")
     else:
-        st.dataframe(df)
+        st.dataframe(df, use_container_width=True)
 
-    wid = st.number_input("Enter Waste ID", min_value=1, step=1)
+    wid = st.number_input("Waste ID", min_value=1, step=1)
     status = st.selectbox("Update Status", ["ACCEPTED", "COLLECTED"])
 
-    if st.button("Update Status"):
+    if st.button("Update Collection Status"):
         if wid in df["id"].values:
             st.session_state.waste_data = update_status(df, wid, status)
             save()
-            st.success("Status updated successfully")
+            st.success("Status updated")
         else:
             st.error("Invalid Waste ID")
 
 # ---------------------------
-# 🛠 ADMIN DASHBOARD
+# ADMIN DASHBOARD
 # ---------------------------
-elif menu == "🛠 Admin Dashboard":
+elif menu == "Admin":
 
-    st.subheader("System Analytics Dashboard")
+    st.header("Admin Access")
+
+    password = st.text_input("Enter Admin Password", type="password")
+
+    if password != ADMIN_PASSWORD:
+        st.warning("Access restricted")
+        st.stop()
+
+    st.success("Access granted")
 
     df = st.session_state.waste_data
 
     if df.empty:
-        st.info("No data available yet.")
+        st.info("No data available")
     else:
 
         col1, col2 = st.columns(2)
 
         with col1:
-            st.write("### Waste Type Distribution")
+            st.subheader("Waste Types")
             st.bar_chart(df["type"].value_counts())
 
         with col2:
-            st.write("### Status Distribution")
+            st.subheader("Status Overview")
             st.bar_chart(df["status"].value_counts())
 
-        st.write("### 📍 Waste Hotspots (AI Insight)")
+        st.subheader("Waste Hotspots")
 
         hotspots = waste_hotspots(df)
 
         if not hotspots.empty:
             st.map(hotspots)
         else:
-            st.info("No location data available yet.")
+            st.info("No location data available")
 
-        st.write("### Full Dataset")
-        st.dataframe(df)
+        st.subheader("All Data")
+        st.dataframe(df, use_container_width=True)
