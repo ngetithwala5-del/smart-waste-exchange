@@ -12,7 +12,12 @@ from analytics import waste_hotspots
 st.set_page_config(page_title="Smart Waste Exchange", layout="wide")
 
 FILE = "waste_data.csv"
-ADMIN_PASSWORD = "admin123"
+
+# USERS (simple auth)
+USERS = {
+    "admin": {"password": "admin123", "role": "admin"},
+    "recycler": {"password": "recycler123", "role": "recycler"}
+}
 
 COLUMNS = [
     "id", "type", "quantity", "location",
@@ -21,13 +26,15 @@ COLUMNS = [
 ]
 
 # ---------------------------
-# CLEAN UI STYLE
+# UI STYLE (GREEN THEME)
 # ---------------------------
 st.markdown("""
 <style>
+body {
+    background-color: #f0fdf4;
+}
 .block-container {
     padding-top: 2rem;
-    padding-bottom: 2rem;
 }
 .stButton>button {
     background-color: #16a34a;
@@ -36,15 +43,16 @@ st.markdown("""
     height: 3em;
     width: 100%;
 }
-.stTextInput, .stNumberInput, .stSelectbox {
-    border-radius: 8px;
-}
 </style>
 """, unsafe_allow_html=True)
 
 # ---------------------------
-# SAFE DATA LOAD
+# SESSION INIT
 # ---------------------------
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
+    st.session_state.role = None
+
 if "waste_data" not in st.session_state:
     if os.path.exists(FILE) and os.path.getsize(FILE) > 0:
         try:
@@ -60,25 +68,43 @@ def save():
 # ---------------------------
 # HEADER
 # ---------------------------
-st.title("Smart Waste Exchange")
-st.subheader("AI-powered waste reporting and recycling platform")
+st.title("♻️ Smart Waste Exchange")
+st.caption("Smart waste reporting and recycling system")
 
-st.markdown("""
-Welcome to a smarter way to manage waste.
+# ---------------------------
+# LOGIN (SIDEBAR)
+# ---------------------------
+st.sidebar.subheader("Staff Login")
 
-- Report waste easily  
-- Get connected to recyclers  
-- Improve environmental sustainability  
-""")
+username = st.sidebar.text_input("Username")
+password = st.sidebar.text_input("Password", type="password")
+
+if st.sidebar.button("Login"):
+    if username in USERS and USERS[username]["password"] == password:
+        st.session_state.logged_in = True
+        st.session_state.role = USERS[username]["role"]
+        st.success("Login successful")
+        st.rerun()
+    else:
+        st.sidebar.error("Invalid credentials")
+
+if st.sidebar.button("Logout"):
+    st.session_state.logged_in = False
+    st.session_state.role = None
+    st.rerun()
 
 # ---------------------------
 # NAVIGATION
 # ---------------------------
-menu = st.sidebar.radio("Navigation", [
-    "Report Waste",
-    "Recycler",
-    "Admin"
-])
+menu_options = ["Report Waste"]
+
+if st.session_state.logged_in:
+    if st.session_state.role == "recycler":
+        menu_options.append("Recycler Dashboard")
+    if st.session_state.role == "admin":
+        menu_options.append("Admin Dashboard")
+
+menu = st.sidebar.radio("Navigation", menu_options)
 
 # ---------------------------
 # PUBLIC REPORT
@@ -131,49 +157,40 @@ if menu == "Report Waste":
 # ---------------------------
 # RECYCLER DASHBOARD
 # ---------------------------
-elif menu == "Recycler":
+elif menu == "Recycler Dashboard":
 
     st.header("Recycler Dashboard")
 
     df = st.session_state.waste_data
 
     if df.empty:
-        st.info("No waste reports available")
+        st.info("No waste available")
     else:
         st.dataframe(df, use_container_width=True)
 
-    wid = st.number_input("Waste ID", min_value=1, step=1)
+    wid = st.number_input("Waste ID", min_value=1)
     status = st.selectbox("Update Status", ["ACCEPTED", "COLLECTED"])
 
-    if st.button("Update Collection Status"):
+    if st.button("Update Status"):
         if wid in df["id"].values:
             st.session_state.waste_data = update_status(df, wid, status)
             save()
-            st.success("Status updated")
+            st.success("Updated")
         else:
-            st.error("Invalid Waste ID")
+            st.error("Invalid ID")
 
 # ---------------------------
 # ADMIN DASHBOARD
 # ---------------------------
-elif menu == "Admin":
+elif menu == "Admin Dashboard":
 
-    st.header("Admin Access")
-
-    password = st.text_input("Enter Admin Password", type="password")
-
-    if password != ADMIN_PASSWORD:
-        st.warning("Access restricted")
-        st.stop()
-
-    st.success("Access granted")
+    st.header("Admin Dashboard")
 
     df = st.session_state.waste_data
 
     if df.empty:
-        st.info("No data available")
+        st.info("No data yet")
     else:
-
         col1, col2 = st.columns(2)
 
         with col1:
@@ -190,8 +207,5 @@ elif menu == "Admin":
 
         if not hotspots.empty:
             st.map(hotspots)
-        else:
-            st.info("No location data available")
 
-        st.subheader("All Data")
         st.dataframe(df, use_container_width=True)
