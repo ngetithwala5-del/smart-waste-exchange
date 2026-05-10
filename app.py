@@ -4,27 +4,21 @@ import datetime
 import os
 
 # ---------------------------
-# FILE STORAGE
+# FILE
 # ---------------------------
 FILE = "waste_data.csv"
 
 # ---------------------------
-# SIMPLE USER DATABASE (TEMP)
+# ROLE USERS (ONLY STAFF ROLES)
 # ---------------------------
 USERS = {
-    "citizen": {"password": "1234", "role": "citizen"},
     "recycler": {"password": "1234", "role": "recycler"},
     "admin": {"password": "1234", "role": "admin"}
 }
 
 # ---------------------------
-# INIT SESSION STATE
+# SESSION STATE INIT
 # ---------------------------
-if "logged_in" not in st.session_state:
-    st.session_state.logged_in = False
-    st.session_state.user = None
-    st.session_state.role = None
-
 if "waste_data" not in st.session_state:
     if os.path.exists(FILE):
         st.session_state.waste_data = pd.read_csv(FILE)
@@ -34,39 +28,37 @@ if "waste_data" not in st.session_state:
             "description", "recycler", "status", "time"
         ])
 
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
+    st.session_state.role = None
+    st.session_state.user = None
+
 # ---------------------------
-# LOGIN FUNCTION
+# LOGIN (ONLY STAFF)
 # ---------------------------
 def login():
-    st.title("🔐 Smart Waste Platform Login")
+    st.sidebar.title("Staff Login")
 
-    username = st.text_input("Username")
-    password = st.text_input("Password", type="password")
+    username = st.sidebar.text_input("Username")
+    password = st.sidebar.text_input("Password", type="password")
 
-    if st.button("Login"):
+    if st.sidebar.button("Login"):
         if username in USERS and USERS[username]["password"] == password:
             st.session_state.logged_in = True
             st.session_state.user = username
             st.session_state.role = USERS[username]["role"]
-            st.success("Login successful!")
             st.rerun()
         else:
-            st.error("Invalid username or password")
+            st.sidebar.error("Invalid login")
 
 # ---------------------------
 # LOGOUT
 # ---------------------------
 def logout():
-    st.sidebar.button("🚪 Logout", on_click=lambda: st.session_state.clear())
+    st.sidebar.button("Logout", on_click=lambda: st.session_state.clear())
 
 # ---------------------------
-# SAVE DATA
-# ---------------------------
-def save_data():
-    st.session_state.waste_data.to_csv(FILE, index=False)
-
-# ---------------------------
-# RECYCLERS DATABASE
+# RECYCLERS DB
 # ---------------------------
 recyclers = pd.DataFrame([
     {"name": "Recycle Manzini", "location": "Manzini"},
@@ -75,7 +67,7 @@ recyclers = pd.DataFrame([
 ])
 
 # ---------------------------
-# MATCHING LOGIC
+# ASSIGN LOGIC
 # ---------------------------
 def assign_recycler(location):
     match = recyclers[recyclers["location"] == location]
@@ -84,43 +76,36 @@ def assign_recycler(location):
     return recyclers.sample(1).iloc[0]["name"]
 
 # ---------------------------
-# LOGIN GATE
+# SAVE
 # ---------------------------
-if not st.session_state.logged_in:
-    login()
-    st.stop()
+def save_data():
+    st.session_state.waste_data.to_csv(FILE, index=False)
 
 # ---------------------------
-# APP UI
+# PUBLIC WASTE REPORT (NO LOGIN)
 # ---------------------------
 st.title("♻️ Smart Waste Exchange Platform")
-st.caption(f"Logged in as: {st.session_state.user} ({st.session_state.role})")
-
-logout()
+st.caption("Public Waste Reporting System for Eswatini")
 
 menu = st.sidebar.radio("Menu", [
-    "📍 Report Waste",
+    "📍 Report Waste (Public)",
     "🚛 Recycler Dashboard",
-    "📊 Analytics Dashboard"
+    "📊 Analytics (Admin)"
 ])
 
 # ---------------------------
-# CITIZEN: REPORT WASTE
+# PUBLIC REPORT FORM
 # ---------------------------
-if menu == "📍 Report Waste":
+if menu == "📍 Report Waste (Public)":
 
-    if st.session_state.role not in ["citizen", "admin"]:
-        st.warning("You are not allowed to access this section.")
-        st.stop()
-
-    st.subheader("Report Waste for Pickup")
+    st.subheader("Report Waste (No Login Required)")
 
     waste_type = st.selectbox("Waste Type", ["Plastic", "Glass", "Metal", "Organic"])
     quantity = st.number_input("Quantity (kg)", min_value=1)
     location = st.selectbox("Location", ["Manzini", "Mbabane", "Nhlangano"])
     description = st.text_area("Description (optional)")
 
-    if st.button("Submit Waste"):
+    if st.button("Submit Report"):
         new_id = len(st.session_state.waste_data) + 1
         recycler = assign_recycler(location)
 
@@ -141,57 +126,66 @@ if menu == "📍 Report Waste":
         )
 
         save_data()
-        st.success(f"Waste assigned to: {recycler}")
+
+        st.success("Waste submitted successfully!")
+        st.info(f"Your assigned recycler: {recycler}")
+        st.info(f"Your Waste ID: {new_id} (save this for tracking)")
+
+# ---------------------------
+# LOGIN FOR STAFF ONLY
+# ---------------------------
+if not st.session_state.logged_in:
+    login()
+    st.stop()
+
+logout()
 
 # ---------------------------
 # RECYCLER DASHBOARD
 # ---------------------------
 if menu == "🚛 Recycler Dashboard":
 
-    if st.session_state.role not in ["recycler", "admin"]:
-        st.warning("You are not allowed to access this section.")
+    if st.session_state.role != "recycler" and st.session_state.role != "admin":
+        st.warning("Not allowed")
         st.stop()
 
-    st.subheader("Available Waste for Collection")
+    st.subheader("Assigned Waste")
 
-    if st.session_state.waste_data.empty:
-        st.info("No waste available yet.")
-    else:
-        st.dataframe(st.session_state.waste_data)
+    st.dataframe(st.session_state.waste_data)
 
-        selected_id = st.number_input("Enter Waste ID to Claim", min_value=1, step=1)
+    selected_id = st.number_input("Enter Waste ID to Mark Collected", min_value=1, step=1)
 
-        if st.button("Claim Waste"):
-            if selected_id in st.session_state.waste_data["id"].values:
-                st.session_state.waste_data.loc[
-                    st.session_state.waste_data["id"] == selected_id,
-                    "status"
-                ] = "Collected"
+    if st.button("Mark Collected"):
+        if selected_id in st.session_state.waste_data["id"].values:
+            st.session_state.waste_data.loc[
+                st.session_state.waste_data["id"] == selected_id,
+                "status"
+            ] = "Collected"
 
-                save_data()
-                st.success("Waste marked as collected!")
-            else:
-                st.error("Invalid ID")
+            save_data()
+            st.success("Marked as collected")
+        else:
+            st.error("Invalid ID")
 
 # ---------------------------
-# ANALYTICS DASHBOARD
+# ADMIN DASHBOARD
 # ---------------------------
-if menu == "📊 Analytics Dashboard":
+if menu == "📊 Analytics (Admin)":
 
-    if st.session_state.role not in ["admin"]:
-        st.warning("Only admin can view analytics.")
+    if st.session_state.role != "admin":
+        st.warning("Admin only section")
         st.stop()
 
-    st.subheader("Environmental Insights")
+    st.subheader("System Analytics")
 
     if st.session_state.waste_data.empty:
-        st.info("No data yet.")
+        st.info("No data yet")
     else:
-        st.write("### Waste Type Distribution")
+        st.write("Waste Types")
         st.bar_chart(st.session_state.waste_data["waste_type"].value_counts())
 
-        st.write("### Waste by Location")
+        st.write("Locations")
         st.bar_chart(st.session_state.waste_data["location"].value_counts())
 
-        st.write("### Full Data")
+        st.write("All Data")
         st.dataframe(st.session_state.waste_data)
